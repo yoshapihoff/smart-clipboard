@@ -1,0 +1,66 @@
+# Go build/cache artifacts
+# ------------------------
+# Compiled object files, binaries and test binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace module cache (if your GOPATH is within the repo)
+/pkg/
+/bin/
+
+# Coverage profiles
+coverage.*
+
+# Temporary files created by `go vet` or other linters
+vet.tmp/
+
+# Editor & IDE folders/files
+# --------------------------
+.idea/
+.vscode/
+*.sublime*
+*.code-workspace
+
+# OS-specific files
+# -----------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+# Thumbnails
+._*
+# Apple metadata files
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux temporary files
+*~
+
+# Miscellaneous
+# -------------
+# Logs
+*.log
+# Swap files
+*.swp
+*.swo
+# Temporary storage for patch files etc.
+*.orig
+*.bak
+
+# Git directories
+# ---------------
+.git/
+
+# Module/vendor directory (if you vendor dependencies)
+/vendor/
