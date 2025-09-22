@@ -7,12 +7,11 @@ import (
 	"encoding/base64"
 	"log"
 
+	"fyne.io/systray"
+	"github.com/gen2brain/beeep"
 	"github.com/yoshapihoff/smart-clipboard/internal/clipboard"
 	"github.com/yoshapihoff/smart-clipboard/internal/config"
 	"github.com/yoshapihoff/smart-clipboard/internal/storage"
-
-	"github.com/gen2brain/beeep"
-	"github.com/getlantern/systray"
 )
 
 var trayIcon []byte
@@ -23,45 +22,45 @@ func RunTray(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 	systray.Run(onReady(manager, store, cfg), onExit(store))
 }
 
+func RunTrayWithHotkeys(manager *clipboard.Manager, store *storage.Storage, cfg *config.Config) {
+	systray.Run(onReady(manager, store, cfg), onExit(store))
+}
+
 func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Config) func() {
 	return func() {
-		// Иконка в трее
 		systray.SetIcon(getIcon())
-		systray.SetTooltip("Smart clipboard")
 
-		// Меню истории
-		historyMenu := systray.AddMenuItem("History", "Show history")
-		updateHistoryMenu(manager, historyMenu)
+		// Формируем подсказку с учетом платформы
+		tooltip := "Smart clipboard\nLeft click: History\nRight click: Menu"
+		systray.SetTooltip(tooltip)
 
-		// Разделитель
 		systray.AddSeparator()
 
-		// Настройки
 		settingsMenu := systray.AddMenuItem("Settings", "Open settings")
-
-		// Очистка истории
 		clearMenu := systray.AddMenuItem("Clear history", "Clear all history")
-
-		// Разделитель
 		systray.AddSeparator()
-
-		// Выход
 		quitMenu := systray.AddMenuItem("Quit", "Quit program")
 
-		// Обновление истории
+		systray.AddSeparator()
+
+		go func() {
+			for range systray.TrayOpenedCh {
+				rebuildMenu(manager, store, cfg)
+			}
+		}()
+
 		go func() {
 			for {
 				select {
-				case <-historyMenu.ClickedCh:
-					showHistoryWindow(manager)
 				case <-settingsMenu.ClickedCh:
 					showSettingsWindow(cfg, store)
 				case <-clearMenu.ClickedCh:
 					manager.ClearHistory()
-					store.SaveHistory(manager.GetHistory())
-					updateHistoryMenu(manager, historyMenu)
-					beeep.Notify("Clipboard History", "History cleared", "")
+					rebuildMenu(manager, store, cfg)
+					beeep.Notify("Smart clipboard", "History cleared", "")
 				case <-quitMenu.ClickedCh:
+					store.SaveHistory(manager.GetHistory())
+					log.Println("Завершение работы приложения...")
 					systray.Quit()
 					return
 				}
@@ -72,54 +71,47 @@ func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 
 func onExit(store *storage.Storage) func() {
 	return func() {
-		// Сохранение данных при выходе
 		log.Println("Выход из приложения")
 	}
 }
 
-func updateHistoryMenu(manager *clipboard.Manager, parent *systray.MenuItem) {
-	// Hide previously created submenu items, if any, to avoid having duplicates.
+func rebuildMenu(manager *clipboard.Manager, store *storage.Storage, cfg *config.Config) {
 	for _, item := range historyItems {
-		item.Hide()
+		item.Remove()
 	}
-	// Reset the slice so we start tracking the fresh set of items.
 	historyItems = historyItems[:0]
 
 	history := manager.GetHistory()
 	if len(history) == 0 {
-		empty := parent.AddSubMenuItem("History is empty", "")
+		empty := systray.AddMenuItem("History is empty", "")
 		empty.Disable()
-		// Track the placeholder item so it can be cleared later.
 		historyItems = append(historyItems, empty)
-		return
-	}
+	} else {
+		maxItems := cfg.MaxDisplayItems
+		if maxItems <= 0 {
+			maxItems = 10 // fallback to default if config is invalid
+		}
 
-	for i, hItem := range history {
-		menuItem := parent.AddSubMenuItem(hItem.Preview, hItem.Timestamp.Format("2006-01-02 15:04:05"))
-		historyItems = append(historyItems, menuItem)
+		for i, hItem := range history {
+			menuItem := systray.AddMenuItem(hItem.Preview, hItem.Timestamp.Format("2006-01-02 15:04:05"))
+			historyItems = append(historyItems, menuItem)
 
-		go func(content string) {
-			for range menuItem.ClickedCh {
-				manager.CopyToClipboard(content)
-				beeep.Notify("Smart Clipboard", "Text copied to clipboard", "")
+			go func(content string) {
+				for range menuItem.ClickedCh {
+					manager.CopyToClipboard(content)
+					manager.IncrementClickCount(content)
+					beeep.Notify("Smart Clipboard", "Text copied to clipboard", "")
+				}
+			}(hItem.Content)
+
+			if i >= maxItems-1 {
+				break
 			}
-		}(hItem.Content)
-
-		// Limit the number of elements displayed in the submenu.
-		if i >= 9 {
-			break
 		}
 	}
 }
 
-func showHistoryWindow(manager *clipboard.Manager) {
-	// Здесь будет код окна с историей
-	// Можно использовать fyne, walk или другие GUI библиотеки
-	beeep.Alert("Smart Clipboard", "History window will be implemented in the next version", "")
-}
-
 func showSettingsWindow(cfg *config.Config, store *storage.Storage) {
-	// Окно настроек
 	beeep.Alert("Smart Clipboard", "Settings window will be implemented in the next version", "")
 }
 
