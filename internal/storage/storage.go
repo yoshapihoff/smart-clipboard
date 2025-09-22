@@ -1,11 +1,12 @@
 package storage
 
 import (
-	"clipboard-history/pkg/clipboard"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/yoshapihoff/smart-clipboard/internal/clipboard"
 )
 
 type Storage struct {

@@ -61,10 +61,10 @@ func SaveConfig(cfg *Config) error {
 
 func getConfigPath() string {
 	configDir, _ := os.UserConfigDir()
-	return filepath.Join(configDir, "clipboard-history", "config.yaml")
+	return filepath.Join(configDir, "smart-clipboard", "config.yaml")
 }
 
 func getDefaultStoragePath() string {
-	dataDir, _ := os.UserDataDir()
-	return filepath.Join(dataDir, "clipboard-history", "history.json")
+	configDir, _ := os.UserConfigDir()
+	return filepath.Join(configDir, "smart-clipboard", "history.json")
 }

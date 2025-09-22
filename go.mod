@@ -1,6 +1,6 @@
 module github.com/yoshapihoff/smart-clipboard
 
-go 1.25.1
+go 1.22
 
 require (
 	github.com/gen2brain/beeep v0.11.1
