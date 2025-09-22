@@ -128,6 +128,16 @@ func getIcon() []byte {
 		return trayIcon
 	}
 
+	var iconBase64 string
+	isDark, err := isDarkTheme()
+	if err != nil {
+		log.Printf("tray: failed to check dark theme: %v", err)
+		iconBase64 = iconBase64White
+	} else if isDark {
+		iconBase64 = iconBase64White
+	} else {
+		iconBase64 = iconBase64Dark
+	}
 	data, err := base64.StdEncoding.DecodeString(iconBase64)
 	if err != nil {
 		log.Printf("tray: failed to decode base64 icon: %v", err)

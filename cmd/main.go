@@ -33,22 +33,24 @@ func main() {
 	// Создание менеджера буфера обмена
 	clipboardManager := clipboard.NewManager(history, cfg.MaxHistorySize)
 
-	// Запуск системного трея
-	tray.RunTray(clipboardManager, store, cfg)
-
 	// Мониторинг буфера обмена
 	go monitorClipboard(clipboardManager, cfg.CheckInterval)
+
+	// Запуск системного трея (blocks until the app quits)
+	tray.RunTray(clipboardManager, store, cfg)
 
 	// Ожидание завершения
 	select {}
 }
 
 func monitorClipboard(manager *clipboard.Manager, interval time.Duration) {
+	log.Println("Monitoring clipboard...")
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		content, err := clipboard.GetClipboard()
+		log.Println("Clipboard content:", content)
 		if err != nil {
 			log.Printf("Ошибка чтения буфера обмена: %v", err)
 			continue
