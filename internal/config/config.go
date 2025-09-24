@@ -19,7 +19,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		MaxHistorySize:  100,
-		MaxDisplayItems: 10,
+		MaxDisplayItems: 40,
 		CheckInterval:   1000 * time.Millisecond,
 		StoragePath:     getDefaultStoragePath(),
 		StartMinimized:  false,
