@@ -17,8 +17,7 @@ import (
 
 var trayIcon []byte
 
-var historyMenuItems []*systray.MenuItem
-var historyMenuItemClickChannels map[string]chan struct{}
+var historyMenuItems map[*systray.MenuItem]clipboard.ClipboardItem
 
 func RunTray(manager *clipboard.Manager, store *storage.Storage, cfg *config.Config) {
 	systray.Run(onReady(manager, store, cfg), onExit(store))
@@ -31,9 +30,8 @@ func RunTrayWithHotkeys(manager *clipboard.Manager, store *storage.Storage, cfg 
 func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Config) func() {
 	return func() {
 		systray.SetIcon(getIcon())
-
 		// Формируем подсказку с учетом платформы
-		tooltip := "Smart clipboard\nLeft click: History\nRight click: Menu"
+		tooltip := "Smart clipboard"
 		systray.SetTooltip(tooltip)
 
 		systray.AddSeparator()
@@ -60,11 +58,6 @@ func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 					manager.ClearHistory()
 					rebuildHistoryMenu(manager, store, cfg)
 					beeep.Notify("Smart clipboard", "History cleared", "")
-
-				case <-():
-					manager.CopyToClipboard(content)
-					manager.IncrementClickCount(content)
-
 				case <-quitMenu.ClickedCh:
 					store.SaveHistory(manager.GetHistory())
 					log.Println("Завершение работы приложения...")
@@ -86,38 +79,36 @@ func rebuildHistoryMenu(manager *clipboard.Manager, store *storage.Storage, cfg 
 	history := manager.GetHistory()
 
 	if len(history) == 0 {
-		for _, menuItem := range historyMenuItems {
+		for menuItem := range historyMenuItems {
 			menuItem.Remove()
 		}
-		historyMenuItems = historyMenuItems[:0]
+		historyMenuItems = make(map[*systray.MenuItem]clipboard.ClipboardItem)
 
 		empty := systray.AddMenuItem("History is empty", "")
 		empty.Disable()
-		historyMenuItems = append(historyMenuItems, empty)
+		historyMenuItems[empty] = clipboard.ClipboardItem{}
 		return
 	}
 
 	var maxReusedMenuItemIndex int
-	for i, menuItem := range historyMenuItems {
-		if i < len(history) {
-			var title string
-			if cfg.DebugMode {
-				title = fmt.Sprintf("[%d] %s", history[i].ClickCount, history[i].Preview)
-			} else {
-				title = history[i].Preview
-			}
-
-			menuItem.SetTitle(title)
-			menuItem.SetTooltip(history[i].Timestamp.Format("2006-01-02 15:04:05"))
-			if menuItem.Disabled() {
-				menuItem.Enable()
-			}
-
-			maxReusedMenuItemIndex = i
+	for menuItem, clipboardItem := range historyMenuItems {
+		var title string
+		if cfg.DebugMode {
+			title = fmt.Sprintf("[%d] %s", clipboardItem.ClickCount, clipboardItem.Preview)
+		} else {
+			title = clipboardItem.Preview
 		}
+
+		menuItem.SetTitle(title)
+		menuItem.SetTooltip(clipboardItem.Timestamp.Format("2006-01-02 15:04:05"))
+		if menuItem.Disabled() {
+			menuItem.Enable()
+		}
+
+		maxReusedMenuItemIndex += 1
 	}
 
-	for i := maxReusedMenuItemIndex + 1; i < len(history); i++ {
+	for i := maxReusedMenuItemIndex; i < len(history); i++ {
 		var title string
 		if cfg.DebugMode {
 			title = fmt.Sprintf("[%d] %s", history[i].ClickCount, history[i].Preview)
@@ -129,10 +120,9 @@ func rebuildHistoryMenu(manager *clipboard.Manager, store *storage.Storage, cfg 
 		menuItem.SetTitle(title)
 		menuItem.SetTooltip(history[i].Timestamp.Format("2006-01-02 15:04:05"))
 
-		historyMenuItems = append(historyMenuItems, menuItem)
+		historyMenuItems[menuItem] = history[i]
 	}
 }
-
 func showSettingsWindow(cfg *config.Config, store *storage.Storage) {
 	beeep.Alert("Smart Clipboard", "Settings window will be implemented in the next version", "")
 }
