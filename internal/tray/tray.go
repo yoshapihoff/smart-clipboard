@@ -5,6 +5,7 @@ package tray
 
 import (
 	"encoding/base64"
+	"fmt"
 	"log"
 
 	"fyne.io/systray"
@@ -16,7 +17,8 @@ import (
 
 var trayIcon []byte
 
-var historyItems []*systray.MenuItem
+var historyMenuItems []*systray.MenuItem
+var historyMenuItemClickChannels map[string]chan struct{}
 
 func RunTray(manager *clipboard.Manager, store *storage.Storage, cfg *config.Config) {
 	systray.Run(onReady(manager, store, cfg), onExit(store))
@@ -45,7 +47,7 @@ func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 
 		go func() {
 			for range systray.TrayOpenedCh {
-				rebuildMenu(manager, store, cfg)
+				rebuildHistoryMenu(manager, store, cfg)
 			}
 		}()
 
@@ -56,8 +58,13 @@ func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 					showSettingsWindow(cfg, store)
 				case <-clearMenu.ClickedCh:
 					manager.ClearHistory()
-					rebuildMenu(manager, store, cfg)
+					rebuildHistoryMenu(manager, store, cfg)
 					beeep.Notify("Smart clipboard", "History cleared", "")
+
+				case <-():
+					manager.CopyToClipboard(content)
+					manager.IncrementClickCount(content)
+
 				case <-quitMenu.ClickedCh:
 					store.SaveHistory(manager.GetHistory())
 					log.Println("Завершение работы приложения...")
@@ -75,39 +82,54 @@ func onExit(store *storage.Storage) func() {
 	}
 }
 
-func rebuildMenu(manager *clipboard.Manager, store *storage.Storage, cfg *config.Config) {
-	for _, item := range historyItems {
-		item.Remove()
-	}
-	historyItems = historyItems[:0]
-
+func rebuildHistoryMenu(manager *clipboard.Manager, store *storage.Storage, cfg *config.Config) {
 	history := manager.GetHistory()
+
 	if len(history) == 0 {
+		for _, menuItem := range historyMenuItems {
+			menuItem.Remove()
+		}
+		historyMenuItems = historyMenuItems[:0]
+
 		empty := systray.AddMenuItem("History is empty", "")
 		empty.Disable()
-		historyItems = append(historyItems, empty)
-	} else {
-		maxItems := cfg.MaxDisplayItems
-		if maxItems <= 0 {
-			maxItems = 10 // fallback to default if config is invalid
-		}
+		historyMenuItems = append(historyMenuItems, empty)
+		return
+	}
 
-		for i, hItem := range history {
-			menuItem := systray.AddMenuItem(hItem.Preview, hItem.Timestamp.Format("2006-01-02 15:04:05"))
-			historyItems = append(historyItems, menuItem)
-
-			go func(content string) {
-				for range menuItem.ClickedCh {
-					manager.CopyToClipboard(content)
-					manager.IncrementClickCount(content)
-					beeep.Notify("Smart Clipboard", "Text copied to clipboard", "")
-				}
-			}(hItem.Content)
-
-			if i >= maxItems-1 {
-				break
+	var maxReusedMenuItemIndex int
+	for i, menuItem := range historyMenuItems {
+		if i < len(history) {
+			var title string
+			if cfg.DebugMode {
+				title = fmt.Sprintf("[%d] %s", history[i].ClickCount, history[i].Preview)
+			} else {
+				title = history[i].Preview
 			}
+
+			menuItem.SetTitle(title)
+			menuItem.SetTooltip(history[i].Timestamp.Format("2006-01-02 15:04:05"))
+			if menuItem.Disabled() {
+				menuItem.Enable()
+			}
+
+			maxReusedMenuItemIndex = i
 		}
+	}
+
+	for i := maxReusedMenuItemIndex + 1; i < len(history); i++ {
+		var title string
+		if cfg.DebugMode {
+			title = fmt.Sprintf("[%d] %s", history[i].ClickCount, history[i].Preview)
+		} else {
+			title = history[i].Preview
+		}
+
+		menuItem := systray.AddMenuItem(title, history[i].Timestamp.Format("2006-01-02 15:04:05"))
+		menuItem.SetTitle(title)
+		menuItem.SetTooltip(history[i].Timestamp.Format("2006-01-02 15:04:05"))
+
+		historyMenuItems = append(historyMenuItems, menuItem)
 	}
 }
 

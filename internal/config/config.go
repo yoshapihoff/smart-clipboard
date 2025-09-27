@@ -9,20 +9,20 @@ import (
 )
 
 type Config struct {
-	MaxHistorySize  int           `yaml:"max_history_size"`
-	MaxDisplayItems int           `yaml:"max_display_items"`
+	MaxItems        int           `yaml:"max_items"`
 	CheckInterval   time.Duration `yaml:"check_interval_ms"`
 	StoragePath     string        `yaml:"storage_path"`
 	StartMinimized  bool          `yaml:"start_minimized"`
+	DebugMode       bool          `yaml:"debug_mode"`
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		MaxHistorySize:  100,
-		MaxDisplayItems: 40,
+		MaxItems:        40,
 		CheckInterval:   1000 * time.Millisecond,
 		StoragePath:     getDefaultStoragePath(),
 		StartMinimized:  false,
+		DebugMode:       true,
 	}
 }
 

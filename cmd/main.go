@@ -27,7 +27,7 @@ func main() {
 		log.Printf("Ошибка загрузки истории: %v", err)
 	}
 
-	clipboardManager := clipboard.NewManager(history, cfg.MaxHistorySize)
+	clipboardManager := clipboard.NewManager(history, cfg.MaxItems)
 
 	go monitorClipboard(clipboardManager, store, cfg.CheckInterval)
 	tray.RunTrayWithHotkeys(clipboardManager, store, cfg)
