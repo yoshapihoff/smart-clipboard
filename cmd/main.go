@@ -30,7 +30,7 @@ func main() {
 	clipboardManager := clipboard.NewManager(history, cfg.MaxItems)
 
 	go monitorClipboard(clipboardManager, store, cfg.CheckInterval)
-	tray.RunTrayWithHotkeys(clipboardManager, store, cfg)
+	tray.RunTray(clipboardManager, store, cfg)
 }
 
 func monitorClipboard(manager *clipboard.Manager, store *storage.Storage, interval time.Duration) {

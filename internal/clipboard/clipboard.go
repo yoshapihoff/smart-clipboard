@@ -112,6 +112,11 @@ func (m *Manager) CopyToClipboard(content string) error {
 	return SetClipboard(content)
 }
 
+// ClearClipboard очищает содержимое системного буфера обмена
+func (m *Manager) ClearClipboard() error {
+	return SetClipboard("")
+}
+
 // IncrementClickCount увеличивает счётчик кликов для элемента и пересортировывает историю
 func (m *Manager) IncrementClickCount(content string) {
 	for i, item := range m.history {
