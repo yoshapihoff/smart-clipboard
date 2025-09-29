@@ -9,36 +9,18 @@ import (
 )
 
 type Config struct {
-	MaxItems       int           `yaml:"max_items"`
-	CheckInterval  time.Duration `yaml:"check_interval_ms"`
-	StoragePath    string        `yaml:"storage_path"`
-	StartMinimized bool          `yaml:"start_minimized"`
-	DebugMode      bool          `yaml:"debug_mode"`
-	Sync           SyncConfig    `yaml:"sync"`
-}
-
-type SyncConfig struct {
-	Enabled      bool   `yaml:"enabled"`
-	ListenPort   int    `yaml:"listen_port"`
-	SendTo       string `yaml:"send_to"`
-	SendEnabled  bool   `yaml:"send_enabled"`
-	RecvEnabled  bool   `yaml:"recv_enabled"`
+	MaxItems      int           `yaml:"max_items"`
+	CheckInterval time.Duration `yaml:"check_interval_ms"`
+	StoragePath   string        `yaml:"storage_path"`
+	DebugMode     bool          `yaml:"debug_mode"`
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		MaxItems:       40,
-		CheckInterval:  1000 * time.Millisecond,
-		StoragePath:    getDefaultStoragePath(),
-		StartMinimized: false,
-		DebugMode:      false,
-		Sync: SyncConfig{
-			Enabled:     false,
-			ListenPort:  9999,
-			SendTo:      "localhost:9999",
-			SendEnabled: true,
-			RecvEnabled: true,
-		},
+		MaxItems:      40,
+		CheckInterval: 1000 * time.Millisecond,
+		StoragePath:   getDefaultStoragePath(),
+		DebugMode:     false,
 	}
 }
 

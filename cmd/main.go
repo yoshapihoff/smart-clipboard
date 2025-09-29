@@ -13,39 +13,41 @@ import (
 )
 
 func main() {
+	// Загружаем базовую конфигурацию
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Printf("Ошибка загрузки конфигурации: %v", err)
 		cfg = config.DefaultConfig()
 	}
 
+	// Теперь создаем хранилище и загружаем локальные данные
 	store, err := storage.NewStorage(cfg.StoragePath)
 	if err != nil {
 		log.Fatalf("Ошибка инициализации хранилища: %v", err)
 	}
 
-	history, err := store.LoadHistory()
+	// Загружаем локальную историю
+	localHistory, err := store.LoadHistory()
 	if err != nil {
-		log.Printf("Ошибка загрузки истории: %v", err)
+		log.Printf("Ошибка загрузки локальной истории: %v", err)
 	}
 
-	clipboardManager := clipboard.NewManager(history, cfg.MaxItems)
-
-	var syncManager *sync.SyncManager
-	if cfg.Sync.Enabled {
-		historyChan := make(chan []types.ClipboardItem, 10)
-		syncManager, err = sync.NewSyncManager(cfg.Sync.ListenPort, cfg.Sync.SendTo, historyChan)
-		if err != nil {
-			log.Printf("Ошибка инициализации синхронизации: %v", err)
-		} else {
-			clipboardManager.SetSyncManager(syncManager)
-			clipboardManager.SetSyncEnabled(true)
-			syncManager.SetSendEnabled(cfg.Sync.SendEnabled)
-			syncManager.SetReceiveEnabled(cfg.Sync.RecvEnabled)
-			syncManager.Start()
-			go handleSyncMessages(clipboardManager, store, historyChan)
-		}
+	// Настраиваем синхронизацию
+	historyChan := make(chan []types.ClipboardItem, 10)
+	syncManager, err := sync.NewSyncManager(historyChan)
+	if err != nil {
+		log.Printf("Ошибка инициализации синхронизации: %v", err)
 	}
+
+	// Создаем менеджер буфера обмена с финальной историей
+	clipboardManager := clipboard.NewManager(localHistory, cfg.MaxItems, syncManager)
+
+	// Устанавливаем callback для получения текущей истории
+	syncManager.SetHistoryCallback(func() []types.ClipboardItem {
+		return clipboardManager.GetHistory()
+	})
+
+	go handleSyncMessages(clipboardManager, store, historyChan)
 
 	go monitorClipboard(clipboardManager, store, cfg.CheckInterval)
 	tray.RunTray(clipboardManager, store, cfg)
@@ -54,6 +56,15 @@ func main() {
 func monitorClipboard(manager *clipboard.Manager, store *storage.Storage, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+
+	// Сначала читаем текущее содержимое буфера обмена и устанавливаем его как последнее
+	initialContent, err := clipboard.GetClipboard()
+	if err != nil {
+		log.Printf("Ошибка начального чтения буфера обмена: %v", err)
+	} else if initialContent != "" {
+		manager.SetLastContent(initialContent)
+		log.Printf("Initial clipboard content set: %s", initialContent[:min(20, len(initialContent))])
+	}
 
 	for range ticker.C {
 		content, err := clipboard.GetClipboard()

@@ -7,26 +7,34 @@ import (
 	"github.com/yoshapihoff/smart-clipboard/internal/types"
 )
 
-
 type Manager struct {
 	history        []types.ClipboardItem
 	maxHistorySize int
 	syncManager    *sync.SyncManager
-	syncEnabled    bool
+	lastContent    string // Отслеживаем последнее содержимое буфера обмена
 }
 
-func NewManager(initialHistory []types.ClipboardItem, maxSize int) *Manager {
+func NewManager(initialHistory []types.ClipboardItem, maxSize int, syncManager *sync.SyncManager) *Manager {
 	return &Manager{
 		history:        initialHistory,
 		maxHistorySize: maxSize,
-		syncEnabled:    false,
+		syncManager:    syncManager,
 	}
 }
 
+// AddToHistory добавляет содержимое в историю и отправляет по сети только если содержимое изменилось
 func (m *Manager) AddToHistory(content string) {
 	if content == "" {
 		return
 	}
+
+	// Проверяем, изменилось ли содержимое буфера обмена
+	if content == m.lastContent {
+		return // Содержимое не изменилось, ничего не делаем
+	}
+
+	// Обновляем последнее содержимое
+	m.lastContent = content
 
 	var existingClickCount int
 	found := false
@@ -65,10 +73,20 @@ func (m *Manager) AddToHistory(content string) {
 		m.history = m.history[:m.maxHistorySize]
 	}
 
-	// Отправляем историю по сети если синхронизация включена
-	if m.syncEnabled && m.syncManager != nil {
+	// Отправляем историю по сети
+	if m.syncManager != nil {
 		go m.syncManager.SendHistory(m.history)
 	}
+}
+
+// SetLastContent устанавливает последнее известное содержимое буфера обмена
+func (m *Manager) SetLastContent(content string) {
+	m.lastContent = content
+}
+
+// GetLastContent возвращает последнее известное содержимое буфера обмена
+func (m *Manager) GetLastContent() string {
+	return m.lastContent
 }
 
 // removeFromHistory удаляет элемент из истории по содержимому
@@ -100,7 +118,7 @@ func (m *Manager) shouldSwap(a, b types.ClipboardItem) bool {
 	if a.ClickCount != b.ClickCount {
 		return a.ClickCount < b.ClickCount
 	}
-	
+
 	// Если количество кликов одинаковое, более новый элемент должен быть выше
 	return a.Timestamp.Before(b.Timestamp)
 }
@@ -134,18 +152,10 @@ func (m *Manager) IncrementClickCount(content string) {
 	}
 }
 
-func (m *Manager) SetSyncManager(syncManager *sync.SyncManager) {
-	m.syncManager = syncManager
-}
-
-func (m *Manager) SetSyncEnabled(enabled bool) {
-	m.syncEnabled = enabled
-}
-
 func (m *Manager) ReplaceHistory(history []types.ClipboardItem) {
 	m.history = history
 	m.sortHistory()
-	
+
 	// Ограничение размера истории
 	if len(m.history) > m.maxHistorySize {
 		m.history = m.history[:m.maxHistorySize]

@@ -57,11 +57,8 @@ func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 		decMaxItemsMenu := settingsMenu.AddSubMenuItem("-5 items", "Decrease max items")
 		settingsMenu.AddSeparator()
 		debugModeMenu := settingsMenu.AddSubMenuItem(fmt.Sprintf("Debug mode: %t", cfg.DebugMode), "Debug mode")
-		
-		// Sync menu items
-		syncMenu := settingsMenu.AddSubMenuItem(fmt.Sprintf("Sync: %t", cfg.Sync.Enabled), "Enable/disable sync")
-		syncSendMenu := settingsMenu.AddSubMenuItem(fmt.Sprintf("Send: %t", cfg.Sync.SendEnabled), "Enable/disable sending")
-		syncRecvMenu := settingsMenu.AddSubMenuItem(fmt.Sprintf("Receive: %t", cfg.Sync.RecvEnabled), "Enable/disable receiving")
+
+		// Sync is always enabled
 
 		systray.AddSeparator()
 
@@ -86,23 +83,10 @@ func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 						cfg.MaxItems -= 5
 						initMenuItemPool(cfg.MaxItems)
 						maxItemsMenu.SetTitle(fmt.Sprintf("Max items: %d", cfg.MaxItems))
-						config.SaveConfig(cfg)
 					}
 				case <-debugModeMenu.ClickedCh:
 					cfg.DebugMode = !cfg.DebugMode
 					debugModeMenu.SetTitle(fmt.Sprintf("Debug mode: %t", cfg.DebugMode))
-					config.SaveConfig(cfg)
-				case <-syncMenu.ClickedCh:
-					cfg.Sync.Enabled = !cfg.Sync.Enabled
-					syncMenu.SetTitle(fmt.Sprintf("Sync: %t", cfg.Sync.Enabled))
-					config.SaveConfig(cfg)
-				case <-syncSendMenu.ClickedCh:
-					cfg.Sync.SendEnabled = !cfg.Sync.SendEnabled
-					syncSendMenu.SetTitle(fmt.Sprintf("Send: %t", cfg.Sync.SendEnabled))
-					config.SaveConfig(cfg)
-				case <-syncRecvMenu.ClickedCh:
-					cfg.Sync.RecvEnabled = !cfg.Sync.RecvEnabled
-					syncRecvMenu.SetTitle(fmt.Sprintf("Receive: %t", cfg.Sync.RecvEnabled))
 					config.SaveConfig(cfg)
 				case <-clearMenu.ClickedCh:
 					manager.ClearClipboard()
