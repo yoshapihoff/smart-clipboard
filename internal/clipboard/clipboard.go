@@ -2,24 +2,24 @@ package clipboard
 
 import (
 	"time"
+
+	"github.com/yoshapihoff/smart-clipboard/internal/sync"
+	"github.com/yoshapihoff/smart-clipboard/internal/types"
 )
 
-type ClipboardItem struct {
-	Content   string    `json:"content"`
-	Timestamp time.Time `json:"timestamp"`
-	Preview   string    `json:"preview"`
-	ClickCount int      `json:"click_count"`
-}
 
 type Manager struct {
-	history        []ClipboardItem
+	history        []types.ClipboardItem
 	maxHistorySize int
+	syncManager    *sync.SyncManager
+	syncEnabled    bool
 }
 
-func NewManager(initialHistory []ClipboardItem, maxSize int) *Manager {
+func NewManager(initialHistory []types.ClipboardItem, maxSize int) *Manager {
 	return &Manager{
 		history:        initialHistory,
 		maxHistorySize: maxSize,
+		syncEnabled:    false,
 	}
 }
 
@@ -42,7 +42,7 @@ func (m *Manager) AddToHistory(content string) {
 		}
 	}
 
-	item := ClipboardItem{
+	item := types.ClipboardItem{
 		Content:    content,
 		Timestamp:  time.Now(),
 		Preview:    getPreview(content),
@@ -51,10 +51,10 @@ func (m *Manager) AddToHistory(content string) {
 
 	// Если элемент не был найден, добавляем его в историю
 	if !found {
-		m.history = append([]ClipboardItem{item}, m.history...)
+		m.history = append([]types.ClipboardItem{item}, m.history...)
 	} else {
 		// Если элемент был найден, вставляем его в начало с сохранённым счётчиком
-		m.history = append([]ClipboardItem{item}, m.history...)
+		m.history = append([]types.ClipboardItem{item}, m.history...)
 	}
 
 	// Сортируем историю: сначала по количеству кликов (по убыванию), затем по времени (по убыванию)
@@ -63,6 +63,11 @@ func (m *Manager) AddToHistory(content string) {
 	// Ограничение размера истории
 	if len(m.history) > m.maxHistorySize {
 		m.history = m.history[:m.maxHistorySize]
+	}
+
+	// Отправляем историю по сети если синхронизация включена
+	if m.syncEnabled && m.syncManager != nil {
+		go m.syncManager.SendHistory(m.history)
 	}
 }
 
@@ -90,7 +95,7 @@ func (m *Manager) sortHistory() {
 }
 
 // shouldSwap определяет, нужно ли поменять местами два элемента
-func (m *Manager) shouldSwap(a, b ClipboardItem) bool {
+func (m *Manager) shouldSwap(a, b types.ClipboardItem) bool {
 	// Если количество кликов разное, элемент с большим количеством кликов должен быть выше
 	if a.ClickCount != b.ClickCount {
 		return a.ClickCount < b.ClickCount
@@ -100,12 +105,12 @@ func (m *Manager) shouldSwap(a, b ClipboardItem) bool {
 	return a.Timestamp.Before(b.Timestamp)
 }
 
-func (m *Manager) GetHistory() []ClipboardItem {
+func (m *Manager) GetHistory() []types.ClipboardItem {
 	return m.history
 }
 
 func (m *Manager) ClearHistory() {
-	m.history = []ClipboardItem{}
+	m.history = []types.ClipboardItem{}
 }
 
 func (m *Manager) CopyToClipboard(content string) error {
@@ -126,6 +131,24 @@ func (m *Manager) IncrementClickCount(content string) {
 			m.sortHistory()
 			break
 		}
+	}
+}
+
+func (m *Manager) SetSyncManager(syncManager *sync.SyncManager) {
+	m.syncManager = syncManager
+}
+
+func (m *Manager) SetSyncEnabled(enabled bool) {
+	m.syncEnabled = enabled
+}
+
+func (m *Manager) ReplaceHistory(history []types.ClipboardItem) {
+	m.history = history
+	m.sortHistory()
+	
+	// Ограничение размера истории
+	if len(m.history) > m.maxHistorySize {
+		m.history = m.history[:m.maxHistorySize]
 	}
 }
 

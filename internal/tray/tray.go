@@ -13,6 +13,7 @@ import (
 	"github.com/yoshapihoff/smart-clipboard/internal/clipboard"
 	"github.com/yoshapihoff/smart-clipboard/internal/config"
 	"github.com/yoshapihoff/smart-clipboard/internal/storage"
+	"github.com/yoshapihoff/smart-clipboard/internal/types"
 )
 
 var trayIcon []byte
@@ -20,6 +21,11 @@ var menuItemPool []*systray.MenuItem
 var menuCancelChannels []chan struct{}
 
 func initMenuItemPool(size int) {
+	stopMenuHandlers()
+	for i := range menuItemPool {
+		menuItemPool[i].Remove()
+	}
+
 	menuItemPool = make([]*systray.MenuItem, size)
 	menuCancelChannels = make([]chan struct{}, size)
 	for i := 0; i < size; i++ {
@@ -37,21 +43,29 @@ func RunTray(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Config) func() {
 	return func() {
 		systray.SetIcon(getIcon())
-		// Формируем подсказку с учетом платформы
 		tooltip := "Smart clipboard"
 		systray.SetTooltip(tooltip)
-
-		// Инициализируем пул элементов меню для истории
-		initMenuItemPool(cfg.MaxItems)
-
-		systray.AddSeparator()
 
 		settingsMenu := systray.AddMenuItem("Settings", "Open settings")
 		clearMenu := systray.AddMenuItem("Clear history", "Clear all history")
 		systray.AddSeparator()
 		quitMenu := systray.AddMenuItem("Quit", "Quit program")
 
+		maxItemsMenu := settingsMenu.AddSubMenuItem(fmt.Sprintf("Max items: %d", cfg.MaxItems), "Max items")
+		maxItemsMenu.Disable()
+		incMaxItemsMenu := settingsMenu.AddSubMenuItem("+5 items", "Increase max items")
+		decMaxItemsMenu := settingsMenu.AddSubMenuItem("-5 items", "Decrease max items")
+		settingsMenu.AddSeparator()
+		debugModeMenu := settingsMenu.AddSubMenuItem(fmt.Sprintf("Debug mode: %t", cfg.DebugMode), "Debug mode")
+		
+		// Sync menu items
+		syncMenu := settingsMenu.AddSubMenuItem(fmt.Sprintf("Sync: %t", cfg.Sync.Enabled), "Enable/disable sync")
+		syncSendMenu := settingsMenu.AddSubMenuItem(fmt.Sprintf("Send: %t", cfg.Sync.SendEnabled), "Enable/disable sending")
+		syncRecvMenu := settingsMenu.AddSubMenuItem(fmt.Sprintf("Receive: %t", cfg.Sync.RecvEnabled), "Enable/disable receiving")
+
 		systray.AddSeparator()
+
+		initMenuItemPool(cfg.MaxItems)
 
 		go func() {
 			for range systray.TrayOpenedCh {
@@ -62,16 +76,41 @@ func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 		go func() {
 			for {
 				select {
-				case <-settingsMenu.ClickedCh:
-					showSettingsWindow(cfg, store)
+				case <-incMaxItemsMenu.ClickedCh:
+					cfg.MaxItems += 5
+					initMenuItemPool(cfg.MaxItems)
+					maxItemsMenu.SetTitle(fmt.Sprintf("Max items: %d", cfg.MaxItems))
+					config.SaveConfig(cfg)
+				case <-decMaxItemsMenu.ClickedCh:
+					if cfg.MaxItems > 5 {
+						cfg.MaxItems -= 5
+						initMenuItemPool(cfg.MaxItems)
+						maxItemsMenu.SetTitle(fmt.Sprintf("Max items: %d", cfg.MaxItems))
+						config.SaveConfig(cfg)
+					}
+				case <-debugModeMenu.ClickedCh:
+					cfg.DebugMode = !cfg.DebugMode
+					debugModeMenu.SetTitle(fmt.Sprintf("Debug mode: %t", cfg.DebugMode))
+					config.SaveConfig(cfg)
+				case <-syncMenu.ClickedCh:
+					cfg.Sync.Enabled = !cfg.Sync.Enabled
+					syncMenu.SetTitle(fmt.Sprintf("Sync: %t", cfg.Sync.Enabled))
+					config.SaveConfig(cfg)
+				case <-syncSendMenu.ClickedCh:
+					cfg.Sync.SendEnabled = !cfg.Sync.SendEnabled
+					syncSendMenu.SetTitle(fmt.Sprintf("Send: %t", cfg.Sync.SendEnabled))
+					config.SaveConfig(cfg)
+				case <-syncRecvMenu.ClickedCh:
+					cfg.Sync.RecvEnabled = !cfg.Sync.RecvEnabled
+					syncRecvMenu.SetTitle(fmt.Sprintf("Receive: %t", cfg.Sync.RecvEnabled))
+					config.SaveConfig(cfg)
 				case <-clearMenu.ClickedCh:
 					manager.ClearClipboard()
 					manager.ClearHistory()
 					beeep.Notify("Smart clipboard", "History cleared", "")
 				case <-quitMenu.ClickedCh:
-					stopMenuHandlers() // Останавливаем все горутины перед выходом
+					stopMenuHandlers()
 					store.SaveHistory(manager.GetHistory())
-					log.Println("Завершение работы приложения...")
 					systray.Quit()
 					return
 				}
@@ -82,8 +121,7 @@ func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 
 func onExit(store *storage.Storage) func() {
 	return func() {
-		stopMenuHandlers() // Останавливаем все горутины при выходе
-		log.Println("Выход из приложения")
+		stopMenuHandlers()
 	}
 }
 
@@ -97,21 +135,17 @@ func stopMenuHandlers() {
 
 func rebuildHistoryMenu(manager *clipboard.Manager, store *storage.Storage, cfg *config.Config) {
 	history := manager.GetHistory()
-	// Останавливаем все старые горутины обработки кликов
 	stopMenuHandlers()
 
-	// Создаем новые каналы отмены
 	for i := range menuCancelChannels {
 		menuCancelChannels[i] = make(chan struct{})
 	}
 
-	// Скрываем все элементы из пула
 	for _, menuItem := range menuItemPool {
 		menuItem.Hide()
 	}
 
 	if len(history) == 0 {
-		// Если история пуста, используем первый элемент из пула для сообщения
 		if len(menuItemPool) > 0 {
 			menuItemPool[0].SetTitle("History is empty")
 			menuItemPool[0].SetTooltip("No clipboard history available")
@@ -121,7 +155,6 @@ func rebuildHistoryMenu(manager *clipboard.Manager, store *storage.Storage, cfg 
 		return
 	}
 
-	// Показываем элементы истории, используя пул
 	itemsToShow := len(history)
 	if itemsToShow > len(menuItemPool) {
 		itemsToShow = len(menuItemPool)
@@ -144,26 +177,20 @@ func rebuildHistoryMenu(manager *clipboard.Manager, store *storage.Storage, cfg 
 		menuItem.Enable()
 		menuItem.Show()
 
-		// Запускаем горутину для обработки кликов по элементу меню
-		go func(menuItem *systray.MenuItem, clipboardItem clipboard.ClipboardItem, cancelChan chan struct{}) {
+		go func(menuItem *systray.MenuItem, clipboardItem types.ClipboardItem, cancelChan chan struct{}) {
 			for {
 				select {
 				case <-menuItem.ClickedCh:
 					manager.CopyToClipboard(clipboardItem.Content)
 					manager.IncrementClickCount(clipboardItem.Content)
-					// После копирования пересобираем меню для обновления порядка
 					rebuildHistoryMenu(manager, store, cfg)
-					return // Выходим из горутины после обработки клика
+					return
 				case <-cancelChan:
-					return // Выходим из горутины при получении сигнала отмены
+					return
 				}
 			}
 		}(menuItem, item, cancelChan)
 	}
-}
-
-func showSettingsWindow(cfg *config.Config, store *storage.Storage) {
-
 }
 
 func getIcon() []byte {
@@ -171,22 +198,10 @@ func getIcon() []byte {
 		return trayIcon
 	}
 
-	var iconBase64 string
-	isDark, err := isDarkTheme()
-	if err != nil {
-		log.Printf("tray: failed to check dark theme: %v", err)
-		iconBase64 = iconBase64White
-	} else if isDark {
-		iconBase64 = iconBase64White
-	} else {
-		iconBase64 = iconBase64Dark
-	}
-	data, err := base64.StdEncoding.DecodeString(iconBase64)
+	trayIcon, err := base64.StdEncoding.DecodeString(iconBase64)
 	if err != nil {
 		log.Printf("tray: failed to decode base64 icon: %v", err)
-	} else {
-		trayIcon = data
-		return trayIcon
+		return nil
 	}
-	return nil
+	return trayIcon
 }

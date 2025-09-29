@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/yoshapihoff/smart-clipboard/internal/clipboard"
+	"github.com/yoshapihoff/smart-clipboard/internal/types"
 )
 
 type Storage struct {
@@ -23,7 +23,7 @@ func NewStorage(filePath string) (*Storage, error) {
 	return &Storage{filePath: filePath}, nil
 }
 
-func (s *Storage) SaveHistory(history []clipboard.ClipboardItem) error {
+func (s *Storage) SaveHistory(history []types.ClipboardItem) error {
 	data, err := json.MarshalIndent(history, "", "  ")
 	if err != nil {
 		return err
@@ -32,9 +32,9 @@ func (s *Storage) SaveHistory(history []clipboard.ClipboardItem) error {
 	return os.WriteFile(s.filePath, data, 0644)
 }
 
-func (s *Storage) LoadHistory() ([]clipboard.ClipboardItem, error) {
+func (s *Storage) LoadHistory() ([]types.ClipboardItem, error) {
 	if _, err := os.Stat(s.filePath); os.IsNotExist(err) {
-		return []clipboard.ClipboardItem{}, nil
+		return []types.ClipboardItem{}, nil
 	}
 
 	data, err := os.ReadFile(s.filePath)
@@ -42,7 +42,7 @@ func (s *Storage) LoadHistory() ([]clipboard.ClipboardItem, error) {
 		return nil, err
 	}
 
-	var history []clipboard.ClipboardItem
+	var history []types.ClipboardItem
 	err = json.Unmarshal(data, &history)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func (s *Storage) CleanOldEntries(maxAge time.Duration) error {
 		return err
 	}
 
-	var filtered []clipboard.ClipboardItem
+	var filtered []types.ClipboardItem
 	cutoff := time.Now().Add(-maxAge)
 
 	for _, item := range history {
