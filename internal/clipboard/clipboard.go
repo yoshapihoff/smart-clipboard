@@ -163,8 +163,8 @@ func (m *Manager) ReplaceHistory(history []types.ClipboardItem) {
 }
 
 func getPreview(content string) string {
-	if len(content) <= 100 {
+	if len(content) <= 32 {
 		return content
 	}
-	return content[:100] + "..."
+	return content[:32] + "..."
 }

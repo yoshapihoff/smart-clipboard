@@ -17,21 +17,17 @@ import (
 )
 
 var trayIcon []byte
-var menuItemPool []*systray.MenuItem
+var menuItemPool *GenericSlice[*systray.MenuItem]
 var menuCancelChannels []chan struct{}
 
 func initMenuItemPool(size int) {
 	stopMenuHandlers()
-	for i := range menuItemPool {
-		menuItemPool[i].Remove()
-	}
-
-	menuItemPool = make([]*systray.MenuItem, size)
+	menuItemPool = NewGenericSliceWithCapacity[*systray.MenuItem](size)
 	menuCancelChannels = make([]chan struct{}, size)
 	for i := 0; i < size; i++ {
 		menuItem := systray.AddMenuItem("", "")
 		menuItem.Hide()
-		menuItemPool[i] = menuItem
+		menuItemPool.Add(menuItem)
 		menuCancelChannels[i] = make(chan struct{})
 	}
 }
@@ -59,8 +55,6 @@ func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 		debugModeMenu := settingsMenu.AddSubMenuItem(fmt.Sprintf("Debug mode: %t", cfg.DebugMode), "Debug mode")
 
 		// Sync is always enabled
-
-		systray.AddSeparator()
 
 		initMenuItemPool(cfg.MaxItems)
 
@@ -91,6 +85,7 @@ func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 				case <-clearMenu.ClickedCh:
 					manager.ClearClipboard()
 					manager.ClearHistory()
+					initMenuItemPool(cfg.MaxItems)
 					beeep.Notify("Smart clipboard", "History cleared", "")
 				case <-quitMenu.ClickedCh:
 					stopMenuHandlers()
@@ -118,6 +113,8 @@ func stopMenuHandlers() {
 }
 
 func rebuildHistoryMenu(manager *clipboard.Manager, store *storage.Storage, cfg *config.Config) {
+	systray.AddSeparator()
+
 	history := manager.GetHistory()
 	stopMenuHandlers()
 
@@ -125,28 +122,22 @@ func rebuildHistoryMenu(manager *clipboard.Manager, store *storage.Storage, cfg 
 		menuCancelChannels[i] = make(chan struct{})
 	}
 
-	for _, menuItem := range menuItemPool {
-		menuItem.Hide()
-	}
-
 	if len(history) == 0 {
-		if len(menuItemPool) > 0 {
-			menuItemPool[0].SetTitle("History is empty")
-			menuItemPool[0].SetTooltip("No clipboard history available")
-			menuItemPool[0].Disable()
-			menuItemPool[0].Show()
+		if menuItemPool.Length() > 0 {
+			if menuItem, ok := menuItemPool.Get(0); ok {
+				menuItem.SetTitle("History is empty")
+				menuItem.SetTooltip("No clipboard history available")
+				menuItem.Disable()
+				menuItem.Show()
+			}
 		}
 		return
 	}
 
 	itemsToShow := len(history)
-	if itemsToShow > len(menuItemPool) {
-		itemsToShow = len(menuItemPool)
-	}
-
 	for i := 0; i < itemsToShow; i++ {
 		item := history[i]
-		menuItem := menuItemPool[i]
+		menuItem, _ := menuItemPool.Get(i)
 		cancelChan := menuCancelChannels[i]
 
 		var title string
@@ -158,7 +149,9 @@ func rebuildHistoryMenu(manager *clipboard.Manager, store *storage.Storage, cfg 
 
 		menuItem.SetTitle(title)
 		menuItem.SetTooltip(item.Timestamp.Format("2006-01-02 15:04:05"))
-		menuItem.Enable()
+		if menuItem.Disabled() {
+			menuItem.Enable()
+		}
 		menuItem.Show()
 
 		go func(menuItem *systray.MenuItem, clipboardItem types.ClipboardItem, cancelChan chan struct{}) {
@@ -167,7 +160,6 @@ func rebuildHistoryMenu(manager *clipboard.Manager, store *storage.Storage, cfg 
 				case <-menuItem.ClickedCh:
 					manager.CopyToClipboard(clipboardItem.Content)
 					manager.IncrementClickCount(clipboardItem.Content)
-					rebuildHistoryMenu(manager, store, cfg)
 					return
 				case <-cancelChan:
 					return
