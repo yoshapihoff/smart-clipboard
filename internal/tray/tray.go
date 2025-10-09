@@ -85,6 +85,7 @@ func onReady(manager *clipboard.Manager, store *storage.Storage, cfg *config.Con
 				case <-clearMenu.ClickedCh:
 					manager.ClearClipboard()
 					manager.ClearHistory()
+					store.SaveHistory(manager.GetHistory())
 					initMenuItemPool(cfg.MaxItems)
 					beeep.Notify("Smart clipboard", "History cleared", "")
 				case <-quitMenu.ClickedCh:
